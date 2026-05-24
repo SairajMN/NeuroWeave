@@ -3,7 +3,9 @@ import json
 import httpx
 from .schemas import DecisionInput, DecisionOutput, NextAction, ToolAction
 
-GATEWAY_URL = os.getenv("LLM_GATEWAY_V3_URL", "http://localhost:8101")
+def _gateway_url() -> str:
+    """Runtime lookup so main.py startup event can override LLM_GATEWAY_V3_URL."""
+    return os.getenv("LLM_GATEWAY_V3_URL", "http://localhost:8101")
 
 async def plan_next_decision(input_state: DecisionInput) -> DecisionOutput:
     """
@@ -64,7 +66,7 @@ async def plan_next_decision(input_state: DecisionInput) -> DecisionOutput:
         }
         
         async with httpx.AsyncClient(timeout=90.0) as client:
-            r = await client.post(f"{GATEWAY_URL}/v1/chat", json=body)
+            r = await client.post(f"{_gateway_url()}/v1/chat", json=body)
             r.raise_for_status()
             res = r.json()
             

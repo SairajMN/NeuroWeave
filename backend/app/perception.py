@@ -3,7 +3,9 @@ import json
 import httpx
 from .schemas import PerceptionOutput, QueryIntent
 
-GATEWAY_URL = os.getenv("LLM_GATEWAY_V3_URL", "http://localhost:8101")
+def _gateway_url() -> str:
+    """Runtime lookup so main.py startup event can override LLM_GATEWAY_V3_URL."""
+    return os.getenv("LLM_GATEWAY_V3_URL", "http://localhost:8101")
 
 async def analyze_query_perception(query: str) -> PerceptionOutput:
     """
@@ -46,7 +48,7 @@ async def analyze_query_perception(query: str) -> PerceptionOutput:
         }
         
         async with httpx.AsyncClient(timeout=60.0) as client:
-            r = await client.post(f"{GATEWAY_URL}/v1/chat", json=body)
+            r = await client.post(f"{_gateway_url()}/v1/chat", json=body)
             r.raise_for_status()
             res = r.json()
             
