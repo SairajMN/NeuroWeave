@@ -58,84 +58,106 @@ The diagram below shows the complete component topology and data flow between la
 
 ```mermaid
 graph TD
-    subgraph "🌐 Frontend (React + Vite)"
-        UI[App.tsx<br/>Root Layout]
-        G3D[GraphCanvas.tsx<br/>3D Force-Directed Graph<br/>Three.js / react-force-graph-3d]
-        HUD[CognitiveStream.tsx<br/>Telemetry Log]
-        ANS[FinalAnswerRenderer.tsx<br/>Synthesis Panel]
-        QRY[QueryInputBar.tsx<br/>Query Input]
-        HIST[RunHistoryModal.tsx<br/>History Explorer]
-        TOPO[TopologyBar.tsx<br/>Status Bar + Confidence Gauge]
-        STORE[useStore.ts<br/>Zustand State<br/>SSE Client + API Layer]
+    subgraph "Frontend - React + Vite"
+        UI[App.tsx Root Layout]
+        G3D[GraphCanvas.tsx - 3D Force Graph]
+        HUD[CognitiveStream.tsx - Telemetry Log]
+        ANS[FinalAnswerRenderer.tsx - Answer Panel]
+        QRY[QueryInputBar.tsx - Query Input]
+        HIST[RunHistoryModal.tsx - History Explorer]
+        TOPO[TopologyBar.tsx - Status + Confidence]
+        STORE[useStore.ts - Zustand State + SSE Client]
     end
 
-    subgraph "⚙️ Backend — FastAPI (:8000)"
-        MAIN[main.py<br/>FastAPI App]
-        PROXY[LLM Proxy<br/>POST /v1/chat]
-        SSE[SSE Stream<br/>POST /api/research]
-        REST[GET /api/graph<br/>GET /api/memory<br/>GET /api/history<br/>POST /api/reset<br/>GET /api/status]
+    subgraph "Backend - FastAPI on port 8000"
+        MAIN[main.py - FastAPI App]
+        PROXY[LLM Proxy via v1/chat]
+        SSE[SSE Stream via api/research]
+        REST[REST Endpoints - graph/memory/history/reset/status]
     end
 
-    subgraph "🧠 Cognitive Engine (agent6.py)"
-        PER[Perception Layer<br/>analyze_query_perception]
-        DEC[Decision Layer<br/>plan_next_decision]
-        ACT[Action Layer<br/>execute_mcp_tool]
-        MEM[Memory & Graph Layer<br/>extract_and_update_graph]
-        FIN[Final Answer Synthesis<br/>generate_final_answer]
-        TELE[TelemetryLogger<br/>SSE Callback Bridge]
+    subgraph "Cognitive Engine - agent6.py"
+        PER[Perception Layer - analyze query intent]
+        DEC[Decision Layer - plan next action]
+        ACT[Action Layer - execute MCP tool]
+        MEM[Memory and Graph Layer - extract and merge]
+        FIN[Final Answer Synthesis - generate answer]
+        TELE[TelemetryLogger - SSE Callback Bridge]
     end
 
-    subgraph "🛠️ MCP Tool Server (mcp_server.py)"
-        WS[web_search<br/>DuckDuckGo HTML Scrape]
-        FETCH[fetch_url<br/>BeautifulSoup Content Extractor]
-        TAV[tavily_search<br/>AI Summary + Snippets]
-        TAVC[tavily_search_context<br/>Raw Content Extraction]
-        FS[filesystem tools<br/>read / create / update / list_dir]
-        TIME[get_time<br/>UTC Timestamp]
+    subgraph "MCP Tool Server - mcp_server.py"
+        WS[web_search - DuckDuckGo]
+        FETCH[fetch_url - BeautifulSoup scraper]
+        TAV[tavily_search - AI summary]
+        TAVC[tavily_search_context - raw content]
+        FS[filesystem - read/create/update/list]
+        TIME[get_time - UTC timestamp]
     end
 
-    subgraph "💾 Persistent Store (state/)"
-        GDB[graph.json<br/>KnowledgeGraph<br/>nodes + edges]
-        MDB[memory.json<br/>MemoryRecord[]<br/>durable facts]
-        RDB[runs.json<br/>Run History Log]
+    subgraph "Persistent Store - state directory"
+        GDB["graph.json - KnowledgeGraph nodes+edges"]
+        MDB["memory.json - MemoryRecord durable facts"]
+        RDB["runs.json - Run History Log"]
     end
 
-    subgraph "🔌 External Services"
-        LLM[OpenRouter API<br/>Fallback: Gemini API]
-        WEB[(Web Sources)]
+    subgraph "External Services"
+        LLM[OpenRouter API / Gemini Fallback]
+        WEB[Web Sources]
     end
 
-    %% Data flows
     UI --> QRY
     QRY --> STORE
-    STORE -->|POST /api/research| SSE
+    STORE -->|POST api/research| SSE
     SSE -->|SSE event stream| STORE
-    STORE -->|GET /api/graph| REST
-    STORE -->|GET /api/history| REST
-    STORE -->|POST /api/reset| REST
-    STORE --> G3D & HUD & ANS & HIST & TOPO
+    STORE -->|GET api/graph| REST
+    STORE -->|GET api/history| REST
+    STORE -->|POST api/reset| REST
+    STORE --> G3D
+    STORE --> HUD
+    STORE --> ANS
+    STORE --> HIST
+    STORE --> TOPO
 
-    REST -->|read/write| GDB & MDB & RDB
+    REST -->|read/write| GDB
+    REST -->|read/write| MDB
+    REST -->|read/write| RDB
 
-    SSE -->|run_autonomous_research| PER
+    SSE -->|run autonomous research| PER
     TELE -->|SSE phase events| SSE
     PER -->|PerceptionOutput| DEC
-    DEC -->|DecisionOutput<br/>next_action: tool/finalize| ACT
-    ACT -->|ToolAction → MCP call| WS & FETCH & TAV & TAVC & FS & TIME
-    WS & FETCH & TAV & TAVC -->|ToolResult| ACT
+    DEC -->|DecisionOutput - tool or finalize| ACT
+    ACT -->|ToolAction via MCP| WS
+    ACT -->|ToolAction via MCP| FETCH
+    ACT -->|ToolAction via MCP| TAV
+    ACT -->|ToolAction via MCP| TAVC
+    ACT -->|ToolAction via MCP| FS
+    ACT -->|ToolAction via MCP| TIME
+    WS -->|ToolResult| ACT
+    FETCH -->|ToolResult| ACT
+    TAV -->|ToolResult| ACT
+    TAVC -->|ToolResult| ACT
     ACT -->|tool results| MEM
-    MEM -->|GraphNode[] + GraphEdge[]| GDB
+    MEM -->|graph nodes and edges| GDB
     MEM -->|extracted facts| DEC
-    DEC -->|confidence high<br/>or max iterations| FIN
+    DEC -->|confidence high or max iterations| FIN
     FIN -->|FinalAnswer| SSE
 
-    PER & DEC & MEM & FIN -->|LLM prompt| PROXY
+    PER -->|LLM prompt| PROXY
+    DEC -->|LLM prompt| PROXY
+    MEM -->|LLM prompt| PROXY
+    FIN -->|LLM prompt| PROXY
     PROXY -->|chat completion| LLM
 
-    WS & FETCH -->|HTTP fetch| WEB
-    TAV & TAVC -->|Tavily API| WEB
+    WS -->|HTTP fetch| WEB
+    FETCH -->|HTTP fetch| WEB
+    TAV -->|Tavily API| WEB
+    TAVC -->|Tavily API| WEB
 
-    TELE -.->|callback during each phase| PER & DEC & ACT & MEM & FIN
+    TELE -.->|callback during each phase| PER
+    TELE -.->|callback during each phase| DEC
+    TELE -.->|callback during each phase| ACT
+    TELE -.->|callback during each phase| MEM
+    TELE -.->|callback during each phase| FIN
 ```
 
 ### Layer Responsibilities
@@ -682,16 +704,16 @@ The frontend is a **React 19 + TypeScript** application built with **Vite**, **Z
 ```mermaid
 flowchart TD
     APP[App.tsx]
-    APP --> TOPO[TopologyBar.tsx<br/>— Connection status<br/>— Node/Edge count<br/>— Confidence gauge<br/>— Phase indicator]
+    APP --> TOPO[TopologyBar - status, counts, confidence]
     APP --> MAIN[Main Layout]
     MAIN --> LEFT[Panel Left]
     MAIN --> RIGHT[Panel Right]
-    LEFT --> CS[CognitiveStream.tsx<br/>— Phase-timestamped log<br/>— Colour-coded by phase<br/>— Auto-scroll]
-    RIGHT --> GC[GraphCanvas.tsx<br/>— 3D force-directed graph<br/>— WebGL with particle flow<br/>— Zoom/pan/rotate<br/>— Node hover tooltips<br/>— Edge relation labels]
-    APP --> FAR[FinalAnswerRenderer.tsx<br/>— Markdown answer display<br/>— react-markdown renderer<br/>— Evidence citations]
-    APP --> QIB[QueryInputBar.tsx<br/>— Text input + Send button<br/>— Reset button<br/>— History button]
-    APP --> RHM[RunHistoryModal.tsx<br/>— Past runs explorer<br/>— Expand/collapse facts]
-    APP --> STORE[useStore.ts<br/>— Zustand state store<br/>— SSE client (fetch + ReadableStream)<br/>— API methods (fetchGraph, fetchHistory, resetSystem)]
+    LEFT --> CS[CognitiveStream - phase log, colour-coded]
+    RIGHT --> GC[GraphCanvas - 3D force graph, WebGL]
+    APP --> FAR[FinalAnswerRenderer - markdown + citations]
+    APP --> QIB[QueryInputBar - input, send, reset, history]
+    APP --> RHM[RunHistoryModal - past runs explorer]
+    APP --> STORE[useStore - Zustand state, SSE client, API layer]
 ```
 
 ### State Management (Zustand)
@@ -913,27 +935,27 @@ flowchart TD
     GIT --> CI[GitHub Actions CI]
 
     subgraph "CI Pipeline"
-        LINT[Lint & Type Check<br/>ESLint / TypeScript]
-        TEST[Test Suite<br/>pytest — 19 tests]
-        VITE[Frontend Build<br/>vite build]
+        LINT[Lint and Type Check - ESLint and TypeScript]
+        TEST[Test Suite - pytest 19 tests]
+        VITE[Frontend Build - vite build]
     end
 
     CI --> LINT
     LINT --> TEST
     TEST -->|all passed| VITE
-    VITE -->|dist/ ready| DEPLOY
+    VITE -->|dist ready| DEPLOY
 
-    subgraph "Render Deploy (Blueprint)"
-        DEPLOY[Deploy Hook<br/>render.yaml]
-        BUILD[Build Command<br/>pip install -r requirements.txt]
-        START[Start Command<br/>uvicorn app.main:app]
-        HEALTH[Health Check<br/>GET /health]
+    subgraph "Render Deploy Blueprint"
+        DEPLOY[Deploy Hook - render.yaml]
+        BUILD[Build Command - pip install]
+        START[Start Command - uvicorn]
+        HEALTH[Health Check - GET health]
     end
 
     DEPLOY --> BUILD
     BUILD --> START
     START --> HEALTH
-    HEALTH -->|healthy| LIVE[(Production)]
+    HEALTH -->|healthy| LIVE[Production]
     HEALTH -->|unhealthy| ROLLBACK[Rollback to Previous]
     ROLLBACK --> GIT
 
@@ -950,14 +972,14 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    EDIT[Edit Code] --> RELOAD[Auto-Reload<br/>uvicorn --reload]
-    RELOAD --> TEST[Run Tests<br/>uv run pytest -v]
+    EDIT[Edit Code] --> RELOAD[Auto-Reload - uvicorn reload]
+    RELOAD --> TEST[Run Tests - uv run pytest]
     TEST -->|pass| COMMIT[git commit]
     TEST -->|fail| EDIT
     COMMIT --> PUSH[git push]
     PUSH --> CI[CI Pipeline]
     CI -->|pass| DEPLOY[Auto-Deploy]
-    CI -->|fail| FIX[Fix & Re-push]
+    CI -->|fail| FIX[Fix and Re-push]
     FIX --> EDIT
 ```
 
