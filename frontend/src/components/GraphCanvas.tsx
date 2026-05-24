@@ -156,7 +156,7 @@ export default function GraphCanvas() {
       setTimeout(() => {
         try {
           fgRef.current.zoomToFit(400, 80);
-        } catch (_) {}
+        } catch (_) { }
       }, 300);
     }
   }, [nodes.length]);
@@ -225,7 +225,7 @@ export default function GraphCanvas() {
     if (fgRef.current) {
       try {
         fgRef.current.zoomToFit(400, 80);
-      } catch (_) {}
+      } catch (_) { }
     }
     setSelectedNode(null);
     setHighlightNodes(new Set());
@@ -364,14 +364,14 @@ export default function GraphCanvas() {
           ref={fgRef}
           graphData={graphData}
           nodeId="id"
-          nodeLabel={null}
+          nodeLabel={undefined}
           nodeColor={(node: GraphNode3D) =>
             selectedNode
               ? isNodeSelected(node)
                 ? getNodeColor(node.type)
                 : isNodeHighlighted(node)
-                ? getNodeColor(node.type)
-                : '#333355'
+                  ? getNodeColor(node.type)
+                  : '#333355'
               : getNodeColor(node.type)
           }
           nodeVal={(node: GraphNode3D) =>

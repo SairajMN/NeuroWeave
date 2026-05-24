@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { useStore } from '../store/useStore';
 import { CheckCircle, ExternalLink, Minimize2, Maximize2 } from 'lucide-react';
@@ -43,7 +43,7 @@ export default function FinalAnswerRenderer() {
           <div className="fa-confidence">
             Confidence: {(finalAnswer.confidence * 100).toFixed(0)}%
           </div>
-          
+
           <div className="fa-markdown">
             <ReactMarkdown>{finalAnswer.answer}</ReactMarkdown>
           </div>

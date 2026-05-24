@@ -43,7 +43,6 @@ function PhaseBadge({ phase }: { phase: string }) {
 
 function EventCard({ event }: { event: TelemetryEvent }) {
   const phase = getPhaseFromEvent(event);
-  const phaseLower = phase.toLowerCase();
 
   let summary = event.phase;
   let details = '';

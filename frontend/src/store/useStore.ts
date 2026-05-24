@@ -24,8 +24,6 @@ interface NeuroWeaveActions {
 
 type NeuroWeaveStore = NeuroWeaveState & NeuroWeaveActions;
 
-const initialGraph = { nodes: [], links: [] } as { nodes: GraphNodeData[]; links: GraphEdgeData[] };
-
 export const useStore = create<NeuroWeaveStore>((set, get) => ({
   // State
   connected: false,
