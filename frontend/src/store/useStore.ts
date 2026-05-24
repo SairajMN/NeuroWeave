@@ -25,7 +25,6 @@ interface NeuroWeaveActions {
 }
 
 type NeuroWeaveStore = NeuroWeaveState & NeuroWeaveActions;
-
 export const useStore = create<NeuroWeaveStore>((set, get) => ({
   // State
   connected: false,

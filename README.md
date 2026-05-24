@@ -178,19 +178,87 @@ graph TD
 
 The **Perception Layer** analyses the user's natural language query and produces a structured plan. It extracts intent type, seed entities, complexity score, and an initial research roadmap.
 
+#### Full Prompt Sent to LLM
+
+**System Prompt:**
+```python
+system_prompt = (
+    "You are the Perception Layer of the NeuroWeave Cognitive OS.\n"
+    "Your task is to analyze user queries and output a structured JSON object representing "
+    "the query intent, extracted seed entities, estimated complexity (1 to 5), suggested tools, "
+    "and an initial reasoning roadmap.\n"
+    "Ensure your output is strictly valid JSON matching the specified schema."
+)
+```
+
+**User Prompt (templated with actual query):**
+```python
+prompt = (
+    f"Analyze the following user query:\n"
+    f"\"{query}\"\n\n"
+    "Return a JSON object conforming exactly to this structure:\n"
+    "{\n"
+    "  \"query\": \"original query text\",\n"
+    "  \"intent\": {\n"
+    "    \"intent_type\": \"factual|research|fact_check|synthesis\",\n"
+    "    \"primary_domain\": \"tech|business|history|general\"\n"
+    "  },\n"
+    "  \"extracted_entities\": [\"entity1\", \"entity2\"],\n"
+    "  \"estimated_complexity\": 3,\n"
+    "  \"suggested_tools\": [\"web_search\", \"fetch_url\", \"get_time\", \"read_file\"],\n"
+    "  \"initial_reasoning_path\": \"Step-by-step hypothesis and search plan\"\n"
+    "}"
+)
+```
+
+#### PoP's Validation JSON (Pydantic Schema)
+
+Defined in `backend/app/schemas.py`. The LLM's raw JSON output is parsed and then validated via `PerceptionOutput.model_validate(json.loads(res["text"]))`.
+
+```python
+class QueryIntent(BaseModel):
+    intent_type: str       # Type of query: factual, research, fact_check, synthesis
+    primary_domain: str    # Main subject area: tech, business, history, general
+
+class PerceptionOutput(BaseModel):
+    query: str                              # The analyzed query
+    intent: QueryIntent                     # Structured intent of the query
+    extracted_entities: List[str]           # Seed entities extracted from the query
+    estimated_complexity: int               # Complexity score from 1 (easy) to 5 (extremely deep)
+    suggested_tools: List[str]              # MCP tools recommended for this research
+    initial_reasoning_path: str             # Starting hypothesis and research roadmap
+```
+
+#### Implementation
+
 ```python
 # backend/app/perception.py
 async def analyze_query_perception(query: str) -> PerceptionOutput:
     system_prompt = (
         "You are the Perception Layer of the NeuroWeave Cognitive OS.\n"
-        "Your task is to analyze user queries and output a structured JSON object..."
+        "Your task is to analyze user queries and output a structured JSON object representing "
+        "the query intent, extracted seed entities, estimated complexity (1 to 5), suggested tools, "
+        "and an initial reasoning roadmap.\n"
+        "Ensure your output is strictly valid JSON matching the specified schema."
     )
-    prompt = f"Analyze the following user query:\n\"{query}\"\n\n" \
-             "Return a JSON object conforming exactly to this structure:\n" \
-             "{\n  \"query\": \"...\",\n  \"intent\": { ... },\n" \
-             "  \"extracted_entities\": [...],\n  \"estimated_complexity\": 3,\n" \
-             "  \"suggested_tools\": [...],\n  \"initial_reasoning_path\": \"...\"\n}"
-
+    
+    prompt = (
+        f"Analyze the following user query:\n"
+        f"\"{query}\"\n\n"
+        "Return a JSON object conforming exactly to this structure:\n"
+        "{\n"
+        "  \"query\": \"original query text\",\n"
+        "  \"intent\": {\n"
+        "    \"intent_type\": \"factual|research|fact_check|synthesis\",\n"
+        "    \"primary_domain\": \"tech|business|history|general\"\n"
+        "  },\n"
+        "  \"extracted_entities\": [\"entity1\", \"entity2\"],\n"
+        "  \"estimated_complexity\": 3,\n"
+        "  \"suggested_tools\": [\"web_search\", \"fetch_url\", \"get_time\", \"read_file\"],\n"
+        "  \"initial_reasoning_path\": \"Step-by-step hypothesis and search plan\"\n"
+        "}"
+    )
+    
     body = {
         "prompt": prompt,
         "system": system_prompt,
@@ -199,12 +267,12 @@ async def analyze_query_perception(query: str) -> PerceptionOutput:
         "auto_route": "perception",
         "response_format": {"type": "json_object"}
     }
-
+    
     async with httpx.AsyncClient(timeout=60.0) as client:
         r = await client.post(f"{_gateway_url()}/v1/chat", json=body)
         r.raise_for_status()
         res = r.json()
-
+    
     parsed_data = json.loads(res["text"])
     return PerceptionOutput.model_validate(parsed_data)
 ```
@@ -231,9 +299,94 @@ async def analyze_query_perception(query: str) -> PerceptionOutput:
 
 The **Decision Layer** evaluates the current research state — action history, accumulated facts, and the persistent knowledge graph — then decides the next step: execute a tool or finalize with an answer.
 
+#### Full Prompt Sent to LLM
+
+**System Prompt:**
+```python
+system_prompt = (
+    "You are the Decision Layer of the NeuroWeave Cognitive OS.\n"
+    "Your task is to review the user's research query, perception analysis, current execution iteration, "
+    "history of previous tool calls and outcomes, currently accumulated facts, and the state of the knowledge graph.\n"
+    "You must decide the NEXT logical action: either execute a tool (like web_search, fetch_url, get_time, read_file) "
+    "or FINALIZE with a final answer if sufficient evidence is gathered or confidence is high.\n"
+    "Avoid redundant searches and tool repetitions. Set confidence_score to indicate how close we are "
+    "to a complete solution (0.0 to 1.0).\n"
+    "Ensure your output is strictly valid JSON conforming to the requested schema."
+)
+```
+
+**User Prompt (templated with runtime state):**
+```python
+prompt = (
+    f"USER QUERY: \"{input_state.query}\"\n\n"
+    f"PERCEPTION PLAN: {input_state.perception.initial_reasoning_path}\n"
+    f"SUGGESTED SEED ENTITIES: {', '.join(input_state.perception.extracted_entities)}\n\n"
+    f"ITERATION: {input_state.iteration} / {input_state.max_iterations}\n\n"
+    f"ACTION HISTORY LOGS:\n{history_str}\n\n"
+    f"ACCUMULATED FACTS:\n" + "\n".join(f"- {f}" for f in input_state.current_facts) + "\n\n"
+    f"CURRENT PERSISTENT KNOWLEDGE GRAPH SUMMARY:\n{input_state.graph_summary}\n\n"
+    "DETERMINE THE NEXT ACTION. Return a JSON object in this exact format:\n"
+    "{\n"
+    "  \"thought\": \"your step-by-step reasoning thought process\",\n"
+    "  \"next_action\": {\n"
+    "    \"action_type\": \"tool|finalize\",\n"
+    "    \"next_tool_call\": { \n"
+    "       \"name\": \"web_search|fetch_url|get_time|read_file|create_file|update_file|list_dir\",\n"
+    "       \"arguments\": { ... }\n"
+    "    }\n"
+    "  },\n"
+    "  \"confidence_score\": 0.85,\n"
+    "  \"stop_reason\": null\n"
+    "}\n"
+    "NOTE: If action_type is 'finalize', set next_tool_call to null."
+)
+```
+
+#### PoP's Validation JSON (Pydantic Schema)
+
+Defined in `backend/app/schemas.py`. The LLM's raw JSON output is parsed and then validated via `DecisionOutput.model_validate(json.loads(res["text"]))`.
+
+```python
+class ToolAction(BaseModel):
+    name: str                           # MCP tool name: web_search, fetch_url, get_time, read_file, create_file, update_file, list_dir
+    arguments: Dict[str, Any]           # Arguments to pass to the tool
+
+class NextAction(BaseModel):
+    action_type: str                    # Either 'tool' to execute a tool or 'finalize' to generate the final answer
+    next_tool_call: Optional[ToolAction] # The tool to call if action_type is 'tool'
+
+class DecisionInput(BaseModel):
+    query: str                          # The original user query
+    perception: PerceptionOutput        # The initial query perception analysis
+    iteration: int                      # Current cognitive iteration index
+    max_iterations: int                 # Maximum allowed iterations before hard stopping
+    action_history: List[Dict[str, Any]] # Logs of previous actions and results
+    current_facts: List[str]            # Currently gathered facts in active memory
+    graph_summary: str                  # Textual summary of current nodes/edges in the persistent graph
+
+class DecisionOutput(BaseModel):
+    thought: str                        # Detailed step-by-step reasoning thought process
+    next_action: NextAction             # The next action decided by the cognitive engine
+    confidence_score: float             # Confidence in the current solution state (0.0 to 1.0)
+    stop_reason: Optional[str]          # Reason for stopping, if finalizing
+```
+
+#### Implementation
+
 ```python
 # backend/app/decision.py
 async def plan_next_decision(input_state: DecisionInput) -> DecisionOutput:
+    system_prompt = (
+        "You are the Decision Layer of the NeuroWeave Cognitive OS.\n"
+        "Your task is to review the user's research query, perception analysis, current execution iteration, "
+        "history of previous tool calls and outcomes, currently accumulated facts, and the state of the knowledge graph.\n"
+        "You must decide the NEXT logical action: either execute a tool (like web_search, fetch_url, get_time, read_file) "
+        "or FINALIZE with a final answer if sufficient evidence is gathered or confidence is high.\n"
+        "Avoid redundant searches and tool repetitions. Set confidence_score to indicate how close we are "
+        "to a complete solution (0.0 to 1.0).\n"
+        "Ensure your output is strictly valid JSON conforming to the requested schema."
+    )
+    
     history_lines = []
     for idx, act in enumerate(input_state.action_history):
         history_lines.append(
@@ -241,17 +394,31 @@ async def plan_next_decision(input_state: DecisionInput) -> DecisionOutput:
             f"Result: {act.get('output')[:1000]}..."
         )
     history_str = "\n\n".join(history_lines) if history_lines else "No actions executed yet."
-
+    
     prompt = (
         f"USER QUERY: \"{input_state.query}\"\n\n"
         f"PERCEPTION PLAN: {input_state.perception.initial_reasoning_path}\n"
+        f"SUGGESTED SEED ENTITIES: {', '.join(input_state.perception.extracted_entities)}\n\n"
         f"ITERATION: {input_state.iteration} / {input_state.max_iterations}\n\n"
         f"ACTION HISTORY LOGS:\n{history_str}\n\n"
         f"ACCUMULATED FACTS:\n" + "\n".join(f"- {f}" for f in input_state.current_facts) + "\n\n"
         f"CURRENT PERSISTENT KNOWLEDGE GRAPH SUMMARY:\n{input_state.graph_summary}\n\n"
-        "DETERMINE THE NEXT ACTION..."
+        "DETERMINE THE NEXT ACTION. Return a JSON object in this exact format:\n"
+        "{\n"
+        "  \"thought\": \"your step-by-step reasoning thought process\",\n"
+        "  \"next_action\": {\n"
+        "    \"action_type\": \"tool|finalize\",\n"
+        "    \"next_tool_call\": { \n"
+        "       \"name\": \"web_search|fetch_url|get_time|read_file|create_file|update_file|list_dir\",\n"
+        "       \"arguments\": { ... }\n"
+        "    }\n"
+        "  },\n"
+        "  \"confidence_score\": 0.85,\n"
+        "  \"stop_reason\": null\n"
+        "}\n"
+        "NOTE: If action_type is 'finalize', set next_tool_call to null."
     )
-
+    
     body = {
         "prompt": prompt,
         "system": system_prompt,
@@ -260,19 +427,25 @@ async def plan_next_decision(input_state: DecisionInput) -> DecisionOutput:
         "auto_route": "decision",
         "response_format": {"type": "json_object"}
     }
-
+    
     async with httpx.AsyncClient(timeout=90.0) as client:
         r = await client.post(f"{_gateway_url()}/v1/chat", json=body)
         r.raise_for_status()
         res = r.json()
-
+    
     parsed_data = json.loads(res["text"])
+    
+    # Guard against LLM outputting null/missing tool call fields
+    next_act = parsed_data.get("next_action", {})
+    if next_act.get("action_type") == "tool" and not next_act.get("next_tool_call"):
+        parsed_data["next_action"]["action_type"] = "finalize"
+        parsed_data["stop_reason"] = "Forced finalize: Tool action decided but tool_call was null."
+    
     return DecisionOutput.model_validate(parsed_data)
 ```
 
 The decision layer also prevents infinite loops — if it detects the same tool call with identical arguments, it forces early finalisation.
 
----
 
 ### 3. Action Layer — MCP Tool Execution
 
