@@ -104,7 +104,8 @@ export const useStore = create<NeuroWeaveStore>((set, get) => ({
       const msg = err instanceof Error ? err.message : 'Unknown error';
       set({ error: msg, isReasoning: false, currentPhase: 'error', statusText: 'ERROR' });
     } finally {
-      // Final graph fetch after completion
+      // Final graph fetch and state cleanup after completion
+      set({ isReasoning: false });
       get().fetchGraph();
       get().fetchHistory();
     }

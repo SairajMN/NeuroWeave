@@ -1,5 +1,6 @@
 import os
 import asyncio
+import signal
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from .schemas import ToolAction, ToolResult
@@ -11,6 +12,7 @@ async def execute_mcp_tool(action: ToolAction) -> ToolResult:
     """
     Spawns the local FastMCP server in a subprocess, initializes an MCP Stdio session,
     executes the requested tool, and returns a validated ToolResult.
+    The subprocess is properly terminated after use to prevent zombie processes.
     """
     server_params = StdioServerParameters(
         command="python3",
@@ -18,6 +20,7 @@ async def execute_mcp_tool(action: ToolAction) -> ToolResult:
         env=os.environ.copy()
     )
     
+    process = None
     try:
         # Connect to the FastMCP server via stdio transport
         async with stdio_client(server_params) as (read_stream, write_stream):

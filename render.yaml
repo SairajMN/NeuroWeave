@@ -1,0 +1,29 @@
+# Render Blueprint Configuration for NeuroWeave Backend
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: neuroweave-backend
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: LLM_GATEWAY_V3_URL
+        value: http://0.0.0.0:8000
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPEN_ROUTER_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_AI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: ROUTER_MERCURY_API_KEY
+        sync: false
