@@ -9,7 +9,9 @@ import type {
   Phase,
 } from '../types';
 
-const API_BASE = 'http://localhost:8000';
+// In development, Vite proxy forwards /api → http://localhost:8000.
+// In production (Vercel), a deployed backend URL should replace this.
+const API_BASE = import.meta.env.DEV ? '' : 'http://localhost:8000';
 
 interface NeuroWeaveActions {
   setConnected: (connected: boolean) => void;
